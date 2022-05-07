@@ -36,16 +36,18 @@ void motorDirection(char M1, char M2, int pwm1, int pwm2);
 void main()
 {
    setup();
-   
+   printf("Inicio\n\r");
    while(true)
    {
-     printf("Dentro\r\n");
+     printf("Dentro\n\r");
      delay_ms(500);
    }
 }
 
 void setup()
 {
+   printf("Setup\n\r");
+   
    TRISA=0b11111111;
    TRISB=0b11111101; //SCL
    TRISC=0b10111001; //PWMA, PWMB, TX
@@ -56,11 +58,10 @@ void setup()
    setup_ccp1(CCP_PWM);
    setup_ccp2(CCP_PWM);
    
-   printf("Inicio\r\n");
-   delay_ms(2000);
-   
    motorDirection('D',40,'D',40);
    STBY = 1;
+   
+   delay_ms(2000);
 }
 
 void motorDirection(char M1, int pwm1, char M2, int pwm2)
