@@ -58,7 +58,7 @@ void setup()
    setup_ccp1(CCP_PWM);
    setup_ccp2(CCP_PWM);
    
-   motorDirection('D',40,'D',40);
+   motorDirection('D',50,'D',50);
    STBY = 1;
    
    delay_ms(2000);
