@@ -75,9 +75,9 @@ void motorDirection(char M1, int pwm1, char M2, int pwm2)
    
    switch (M2)
    {
-      case 'D': {BI1=1; BI2=0; break;}
-      case 'R': {BI1=0; BI2=1; break;}
-      case 'N': {BI1=0; BI2=0; break;}
+      case 'D': {AI1=1; AI2=0; break;}
+      case 'R': {AI1=0; AI2=1; break;}
+      case 'N': {AI1=0; AI2=0; break;}
    }
    
    set_pwm1_duty(pwm1);
