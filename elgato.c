@@ -84,16 +84,54 @@ void main()
    
    while(true)
    {
-      motor('D',50,'D',50);
-      
       readSensor(5);
-      if(adc3>250)
+      if(adc3>210)
       {
-         cuentasM1=0;
-         cuentasM2=0;
-         while(cuentasM1<750)
-         motor('D',60,'N',0);
+         if(adc5<100)
+         {
+            motor('D',50,'R',50);
+            cuentasM1=0;
+            while(cuentasM1<300);
+         }
+         
+         else if(adc1<100)
+         {
+            motor('R',50,'D',50);
+            cuentasM2=0;
+            while(cuentasM2<300);
+         }
+         
+         else
+         {
+            motor('R',50,'R',50);
+         }
       }
+      
+      else if(adc1>350)
+      {
+         motor('D',60,'R',50);
+      }
+      
+      else if(adc2>350)
+      {
+         motor('D',60,'R',50);
+      }
+      
+      else if(adc4>350)
+      {
+         motor('R',50,'D',60);
+      }
+      
+      else if(adc5>350)
+      {
+         motor('R',50,'D',60);
+      }
+      
+      else
+      {
+         motor('D',50,'D',50);
+      }
+      
    }
 }
 
