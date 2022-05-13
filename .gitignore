@@ -3,4 +3,6 @@ $ cat .gitignore
 /*
 !.gitignore
 !elgato.c
+!PCB.pdsprj
+!MPU6050.c
 !README.md
