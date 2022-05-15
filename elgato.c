@@ -20,11 +20,6 @@
 #byte TRISC = 0xF94
 #byte TRISD = 0xF95
 #byte TRISE = 0xF96
-#bit LEFT = 0xF80.0
-#bit LFFR = 0xF80.1
-#bit FRNT = 0xF80.2
-#bit RGFR = 0xF80.3
-#bit RGHT = 0xF80.5
 #bit PWMA = 0xF82.2
 #bit PWMB = 0xF82.1
 #bit BI1 = 0xF83.0
@@ -33,8 +28,7 @@
 #bit AI2 = 0xF84.1
 #bit STBY = 0xF84.2
 
-//1: Left, 2: Left-Front, 3: Front, 4: Right-front, 5: Right
-int16 adc1, adc2, adc3, adc4, adc5; 
+int16 L, FL, F, FR, R; 
 //int32 temp, x, y, z;
 volatile int8 aux;
 volatile int8 encoderM1=0;
@@ -46,19 +40,19 @@ volatile signed int16 cuentasM2=0;
 
 #int_rb
 void rb_isr(){
-   encoderM1=(PORTB&0b00110000)>>4;//0x30=00110000
+   encoderM1=(PORTB&0b00110000)>>4;
    aux=encoderM1^encoderM1_anterior;
-   if(aux!=0&&aux!=0b00000011)//3=011
-      if(((encoderM1_anterior<<1)^encoderM1)&0b00000010)//0x02=10
+   if(aux!=0&&aux!=0b00000011)
+      if(((encoderM1_anterior<<1)^encoderM1)&0b00000010)
          cuentasM1--;
       else
          cuentasM1++;
    encoderM1_anterior=encoderM1;
 
-   encoderM2=(PORTB&0b11000000)>>6;//0xC0=1100 0000
+   encoderM2=(PORTB&0b11000000)>>6;
    aux=encoderM2^encoderM2_anterior;
-   if(aux!=0&&aux!=0b00000011)//3=011
-         if(((encoderM2_anterior<<1)^encoderM2)&0b00000010)//0x02=10
+   if(aux!=0&&aux!=0b00000011)
+         if(((encoderM2_anterior<<1)^encoderM2)&0b00000010)
             cuentasM2++;
          else
             cuentasM2--;
@@ -80,12 +74,14 @@ void debug(int type);
 void main()
 {
    delay_ms(1000);
-   setup(1);
+   setup(0);
    
    while(true)
    {
+      debug(1);
+      /*
       readSensor(5);
-      if(adc3>210)
+      if(F>210)
       {
          if(adc5<100)
          {
@@ -94,7 +90,7 @@ void main()
             while(cuentasM1<300);
          }
          
-         else if(adc1<100)
+         else if(L<100)
          {
             motor('R',50,'D',50);
             cuentasM2=0;
@@ -107,22 +103,22 @@ void main()
          }
       }
       
-      else if(adc1>350)
+      else if(L>350)
       {
          motor('D',60,'R',50);
       }
       
-      else if(adc2>350)
+      else if(FL>350)
       {
          motor('D',60,'R',50);
       }
       
-      else if(adc4>350)
+      else if(FR>350)
       {
          motor('R',50,'D',60);
       }
       
-      else if(adc5>350)
+      else if(R>350)
       {
          motor('R',50,'D',60);
       }
@@ -131,7 +127,7 @@ void main()
       {
          motor('D',50,'D',50);
       }
-      
+      */
    }
 }
 
@@ -203,16 +199,16 @@ void readSensor(int sensor)
 {
    switch (sensor)
    {
-      case 0: {set_adc_channel(1); delay_us(20); adc1=read_adc(); break;}
-      case 1: {set_adc_channel(4); delay_us(20); adc2=read_adc(); break;}
-      case 2: {set_adc_channel(3); delay_us(20); adc3=read_adc(); break;}
-      case 3: {set_adc_channel(2); delay_us(20); adc4=read_adc(); break;}
-      case 4: {set_adc_channel(0); delay_us(20); adc5=read_adc(); break;}
-      case 5: {set_adc_channel(1); delay_us(20); adc1=read_adc();
-               set_adc_channel(4); delay_us(20); adc2=read_adc();
-               set_adc_channel(3); delay_us(20); adc3=read_adc();
-               set_adc_channel(2); delay_us(20); adc4=read_adc();
-               set_adc_channel(0); delay_us(20); adc5=read_adc(); break;}
+      case 0: {set_adc_channel(1); delay_us(20); L=read_adc(); break;}
+      case 1: {set_adc_channel(4); delay_us(20); FL=read_adc(); break;}
+      case 2: {set_adc_channel(3); delay_us(20); F=read_adc(); break;}
+      case 3: {set_adc_channel(2); delay_us(20); FR=read_adc(); break;}
+      case 4: {set_adc_channel(0); delay_us(20); R=read_adc(); break;}
+      case 5: {set_adc_channel(1); delay_us(20); L=read_adc();
+               set_adc_channel(4); delay_us(20); FL=read_adc();
+               set_adc_channel(3); delay_us(20); F=read_adc();
+               set_adc_channel(2); delay_us(20); FR=read_adc();
+               set_adc_channel(0); delay_us(20); R=read_adc(); break;}
    } 
 }
 
@@ -231,7 +227,7 @@ void debug(int type)
       case 1:
       {
         readSensor(5);   
-        printf("S1: %Ld    S2: %Ld    S3: %Ld    S4: %Ld    S5: %Ld\n\r",adc1, adc2, adc3, adc4, adc5);
+        printf("L:%Ld\tFL:%Ld\tF:%Ld\tFR:%Ld\tR:%Ld\n\r",L,FL,F,FR,R);
         delay_ms(100);
         break;
       }
