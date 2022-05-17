@@ -8,6 +8,11 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define right 1
+#define left 0
+#define on 1
+#define off 0
+
 #bit CREN=0xFAB.4
 #bit OERR=0xFAB.1
 #byte PORTA = 0xF80
@@ -28,130 +33,96 @@
 #bit AI2 = 0xF84.1
 #bit STBY = 0xF84.2
 
+//Movement variables
 int16 L, FL, F, FR, R; 
-//int32 temp, x, y, z;
 float pwmL, pwmR;
-float k=0.3;
-int16 minV=150;
+float k=0.5;                        //Proportional gain
+int16 minV=150;                     //PWM limits
+int16 nomV=200;
 int16 maxV=300;
-int16 limWall=260;
-int16 noWall=100;
+int16 turnV=250;                    //Why did I make this a variable? Used for 180 turns
+int16 closeWall=400;                //Used for emergency shifts in straight(); and reverses in turn180();
+int16 turnWall=300;                 //Maximum allowed distance before attempting to turn
+int16 limWall=240;                  //Avg distance between both L and R sensors with two walls
+int16 noWall=140;                   //Minimum distance that indicates that no wall is nearby
+signed int16 pulses90= 80;         //Pulse counts (90º turn)
+signed int16 pulses180= 1000;       //Pulse counts (180º turn)
+int16 pulsesD =800;
 
-
-volatile int8 aux;
+//Encoder variables
+volatile int8 aux;      
 volatile int8 encoderM1=0;
-volatile int8 encoderM1_anterior=0;
-volatile signed int16 cuentasM1=0;
+volatile int8 encoderM1_prev=0;
+volatile signed int16 pulsesM1=0;
 volatile int8 encoderM2=0;
-volatile int8 encoderM2_anterior=0;
-volatile signed int16 cuentasM2=0;
+volatile int8 encoderM2_prev=0;
+volatile signed int16 pulsesM2=0;
 
 #int_rb
 void rb_isr(){
    encoderM1=(PORTB&0b00110000)>>4;
-   aux=encoderM1^encoderM1_anterior;
+   aux=encoderM1^encoderM1_prev;
    if(aux!=0&&aux!=0b00000011)
-      if(((encoderM1_anterior<<1)^encoderM1)&0b00000010)
-         cuentasM1--;
+      if(((encoderM1_prev<<1)^encoderM1)&0b00000010)
+         pulsesM1--;
       else
-         cuentasM1++;
-   encoderM1_anterior=encoderM1;
+         pulsesM1++;
+   encoderM1_prev=encoderM1;
 
    encoderM2=(PORTB&0b11000000)>>6;
-   aux=encoderM2^encoderM2_anterior;
+   aux=encoderM2^encoderM2_prev;
    if(aux!=0&&aux!=0b00000011)
-         if(((encoderM2_anterior<<1)^encoderM2)&0b00000010)
-            cuentasM2++;
+         if(((encoderM2_prev<<1)^encoderM2)&0b00000010)
+            pulsesM2++;
          else
-            cuentasM2--;
-   encoderM2_anterior=encoderM2;
+            pulsesM2--;
+   encoderM2_prev=encoderM2;
    
-   if((cuentasM1>30000)||(cuentasM1<-30000))
-   cuentasM1=0;
+   if((pulsesM1>30000)||(pulsesM1<-30000))
+   pulsesM1=0;
    
-   if((cuentasM2>30000)||(cuentasM2<-30000))
-   cuentasM2=0;
+   if((pulsesM2>30000)||(pulsesM2<-30000))
+   pulsesM2=0;
 }
 
-void setup(short on);
-void fflush();
-void motor(int M1, signed int16 pwm1, char M2, signed int16 pwm2);
-void readSensor(int sensor);
-void debug(int type);
+void setup(short status);                                            //Setup instructions
+void debug(int type);                                                //Encoder and SHARP test
+void motor(int M1, signed int16 pwm1, char M2, signed int16 pwm2);   //Basic function for motor driving
+void straight();                                                     //Tries to drive straight, based on (ALL) SHARP readings (All 5 of them)
+void forceStraight();                                                //Used exclusively after a 90 turn.
+void turn90(short direction);                                        //Short delay, 90 turn. Based on encoders, and (FL, FR) SHARP readings. 
+void turn180();                                                      //180 turn, based on (ALL) SHARP readings (are encoders even useful here?)
+void readSensor(int sensor);                                         //ADC read
+void update(int16 pwm1, int16 pwm2);                                 //Restores PWM value, reads (ALL) SHARP.
 
 void main()
 {
-   delay_ms(1000);
-   setup(0);
+   delay_ms(2000);
+   setup(on);
    
    while(true)
    {
-      debug(1);
-      //readSensor(5);
+      update(nomV, nomV);
       /*
-      if(F<300)
+      if(R<noWall)
       {
-         STBY=1;
-         pwmL=200;
-         pwmR=200;
-         
-         if(L>noWall && R>noWall)
-         {
-            if(L>R)
-            {
-               pwmL=pwmL+(k*(L-R));
-               pwmR=pwmR-(k*(L-R));
-            }
-            
-            else if(R>L)
-            {
-               pwmL=pwmL-(k*(R-L));
-               pwmR=pwmR+(k*(R-L));
-            }
-         }
-         
-         else if(L<noWall) //no left wall
-         {
-            if(R>limWall)
-            {
-               pwmL=pwmL-(k*(R-limWall));
-               pwmR=pwmR+(k*(R-limWall));
-            }
-            
-            if(R<limWall)
-            {
-               pwmL=pwmL+(k*(R-limWall));
-               pwmR=pwmR-(k*(R-limWall));
-            }
-         }
-         
-         else if(R<noWall) //no left wall
-         {
-            if(L>limWall)
-            {
-               pwmL=pwmL-(k*(L-limWall));
-               pwmR=pwmR+(k*(L-limWall));
-            }
-            
-            if(L<limWall)
-            {
-               pwmL=pwmL+(k*(L-limWall));
-               pwmR=pwmR-(k*(L-limWall));
-            }
-         }
-         
-
-         
-         motor('D',(signed int16)pwmL,'D',(signed int16)pwmR);
+         turn90(right);
+         motor('N',0,'N',0);
+         delay_ms(500);
       }
-      
-      else
-      STBY=0;
       */
+      if(F<turnWall)
+      {
+         straight();
+      }
+      else
+      {
+         turn180();
+      }
    }
 }
 
-void setup(short on)
+void setup(short status)
 {
    STBY = 0;
    enable_interrupts(int_rb);
@@ -175,7 +146,7 @@ void setup(short on)
    setup_ccp1(CCP_PWM);
    setup_ccp2(CCP_PWM);
    
-   if(on)
+   if(status)
    {
       motor('D',(int16)200,'D',(int16)200);
       STBY = 1;
@@ -183,18 +154,28 @@ void setup(short on)
    
    return;
 }
-
-void fflush()
+void debug(int type)
 {
-   if(OERR)
+   switch(type)
    {
-      getc();     //Clear buffer
-      getc();
-      CREN=0;      //Clear CREN bit
-      CREN=1;           
+      case 0:
+      {
+        readSensor(5);   
+        printf("M1: %Ld    M2: %Ld \r\n",pulsesM1, pulsesM2);
+        delay_ms(100);
+        break;
+      }
+      
+      case 1:
+      {
+        readSensor(5);   
+        printf("L:%Ld\tFL:%Ld\tF:%Ld\tFR:%Ld\tR:%Ld\n\r",L,FL,F,FR,R);
+        delay_ms(100);
+        break;
+      }
    }
+   return;
 }
-
 void motor(int M1, signed int16 pwm1, char M2, signed int16 pwm2)
 {
    switch (M1)
@@ -218,8 +199,149 @@ void motor(int M1, signed int16 pwm1, char M2, signed int16 pwm2)
    
    set_pwm1_duty(pwm1);
    set_pwm2_duty(pwm2);
+   
+   return;
+}
+void straight()
+{ 
+   if(FL>closeWall)     //Prioritizes not going straight into walls
+   {
+      pwmL=pwmL+(k*(FL-limWall));
+      pwmR=pwmR-(k*(FL-limWall));
+      motor('D',(signed int16)pwmL,'R',(signed int16)pwmR);
+      return;
+   }
+   
+   else if(FR>closeWall)
+   {
+      pwmL=pwmL-(k*(FR-limWall));
+      pwmR=pwmR+(k*(FR-limWall));
+      motor('R',(signed int16)pwmL,'D',(signed int16)pwmR);
+      return;
+   }
+   
+   else if(L>noWall && R>noWall)
+   {
+      if(L>R)
+      {
+         pwmL=pwmL+(k*(L-R));
+         pwmR=pwmR-(k*(L-R));
+      }
+      
+      else if(R>L)
+      {
+         pwmL=pwmL-(k*(R-L));
+         pwmR=pwmR+(k*(R-L));
+      }
+   }
+   
+   else if(R>noWall && L<noWall) //no left wall
+   {
+      if(R>limWall)
+      {
+         pwmL=pwmL-(k*(R-limWall));
+         pwmR=pwmR+(k*(R-limWall));
+      }
+      
+      if(R<limWall)
+      {
+         pwmL=pwmL+(k*(R-limWall));
+         pwmR=pwmR-(k*(R-limWall));
+      }
+   }
+   
+   else if(L>noWall && R<noWall) //no right wall
+   {
+      if(L>limWall)
+      {
+         pwmL=pwmL+(k*(L-limWall));
+         pwmR=pwmR-(k*(L-limWall));
+      }
+      
+      if(L<limWall)
+      {
+         pwmL=pwmL-(k*(L-limWall));
+         pwmR=pwmR+(k*(L-limWall));
+      }
+   }
+
+   
+   motor('D',(signed int16)pwmL,'D',(signed int16)pwmR);
+   return;
+}
+void turn90(short direction)
+{
+   pulsesM1=0;
+   pulsesM2=0;
+   while(pulsesM1<pulsesD && pulsesM2<pulsesD)
+   {
+      update(nomV,nomV);      
+      if(pulsesM1>pulsesM2)
+      {
+         pwmL=pwmL-(k*(pulsesM1-pulsesM2));
+         pwmR=pwmR+(k*(pulsesM1-pulsesM2));
+         motor('D',(signed int16)pwmL,'D',(signed int16)pwmR);
+      }
+   
+      if(pulsesM1<pulsesM2)
+      {
+         pwmL=pwmL+(k*(pulsesM2-pulsesM1));
+         pwmR=pwmR-(k*(pulsesM2-pulsesM1));
+         motor('D',(signed int16)pwmL,'D',(signed int16)pwmR);
+      }
+   }
+   
+   pulsesM1=0;
+   pulsesM1=0;
+   update(turnV, turnV);
+   while(pulsesM1<pulses90 || pulsesM2>-pulses90)
+   {
+      if(pulsesM1>pulses90)
+      pwmL=0;
+      if(pulsesM2<-pulses90)
+      pwmR=0;
+      motor('D',(signed int16)pwmL,'R',(signed int16)pwmR); 
+   }
 }
 
+void turn180()
+{
+   /*
+   signed int16 tempM1, tempM2;
+   pulsesM1=0;
+   pulsesM2=0;
+  
+   while(pulsesM1<pulses180 || pulsesM2>-pulses180)
+   {      
+      update(turnV, turnV);
+      if(FR>closeWall || FR>closeWall || F>closeWall)
+      {
+         tempM1=pulsesM1;
+         tempM2=pulsesM2;
+         while(FR>closeWall||FR>closeWall||F>closeWall)
+         {
+            motor('R',(signed int16)pwmL,'R',(signed int16)pwmR);    
+            update(turnV, turnV);
+         }
+         pulsesM1=tempM1;
+         pulsesM2=tempM2;
+      }   
+      else 
+         motor('D',(signed int16)pwmL,'R',(signed int16)pwmR);
+   }
+   update(turnV, turnV);
+   */
+   while(F>limWall || FL>limWall || FR>limWall)
+   {
+      update(turnV, turnV);
+      if(FR>closeWall||FR>closeWall||F>closeWall)
+         motor('R',(signed int16)pwmL,'R',(signed int16)pwmR);
+      else
+         motor('D',(signed int16)pwmL,'R',(signed int16)pwmR);
+   }
+   
+   return;
+}
 void readSensor(int sensor)
 {
    switch (sensor)
@@ -234,78 +356,14 @@ void readSensor(int sensor)
                set_adc_channel(3); delay_us(20); F=read_adc();
                set_adc_channel(2); delay_us(20); FR=read_adc();
                set_adc_channel(0); delay_us(20); R=read_adc(); break;}
-   } 
-}
-
-void debug(int type)
-{
-   switch(type)
-   {
-      case 0:
-      {
-        readSensor(5);   
-        printf("M1: %Ld    M2: %Ld \r\n",cuentasM1, cuentasM2);
-        delay_ms(100);
-        break;
-      }
-      
-      case 1:
-      {
-        readSensor(5);   
-        printf("L:%Ld\tFL:%Ld\tF:%Ld\tFR:%Ld\tR:%Ld\n\r",L,FL,F,FR,R);
-        delay_ms(100);
-        break;
-      }
    }
+   
    return;
 }
-
-      /*
-      readSensor(5);
-      if(F>210)
-      {
-         if(adc5<100)
-         {
-            motor('D',50,'R',50);
-            cuentasM1=0;
-            while(cuentasM1<300);
-         }
-         
-         else if(L<100)
-         {
-            motor('R',50,'D',50);
-            cuentasM2=0;
-            while(cuentasM2<300);
-         }
-         
-         else
-         {
-            motor('R',50,'R',50);
-         }
-      }
-      
-      else if(L>350)
-      {
-         motor('D',60,'R',50);
-      }
-      
-      else if(FL>350)
-      {
-         motor('D',60,'R',50);
-      }
-      
-      else if(FR>350)
-      {
-         motor('R',50,'D',60);
-      }
-      
-      else if(R>350)
-      {
-         motor('R',50,'D',60);
-      }
-      
-      else
-      {
-         motor('D',50,'D',50);
-      }
-      */
+void update(int16 pwm1, int16 pwm2)
+{
+   readSensor(5);
+   pwmL=pwm1;
+   pwmR=pwm2;
+   return;
+}
