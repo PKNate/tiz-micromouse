@@ -44,12 +44,11 @@ static int16 closeWall=350;                        //Used for emergency shifts i
 static int16 turnWall=300;                         //Maximum allowed distance before attempting to turn
 static int16 limWall=240;                          //Avg distance between both L and R sensors with two walls
 static int16 noWall=150;                           //Minimum distance that indicates that no wall is nearby
-static signed int16 pulses90= 410;                 //Pulse counts (90º turn), tested at 350 turns avg
+static signed int16 pulses90= 400;                 //Pulse counts (90º turn), tested at 350 turns avg
 static signed int16 pulses180= 690;                //Pulse counts (180º turn), tested at 720 turns avg
-static signed int16 pulsesD9= 690;                 //Delay for 90 turn, not tested
-static signed int16 pulsesDS= 500;                 //Delay for forcing straight, tested at 600 avg
+static signed int16 pulsesD9= 520;                 //Delay for 90 turn, not tested
+static signed int16 pulsesDS= 490;                 //Delay for forcing straight, tested at 600 avg
 static signed int16 offsetR= 10;                   //prev:50
-signed int16 prevM1=0, prevM2=0;
                                                    //Encoder variables
 volatile int8 aux;      
 volatile int8 encoderM1=0;
@@ -58,7 +57,6 @@ volatile signed int16 pulsesM1=0;
 volatile int8 encoderM2=0;
 volatile int8 encoderM2_prev=0;
 volatile signed int16 pulsesM2=0;
-unsigned int32 i;
 
 void setup(short status);                                            //Setup instructions
 void debug(int type);                                                //Encoder and SHARP test
@@ -91,22 +89,6 @@ void rb_isr(){
             
    encoderM2_prev=encoderM2;
 }
-/*
-#int_timer0
-void emergencyReverse(){
-  if((((prevM1-pulsesM1)<2) || ((prevM1-pulsesM1)>(-2))) || ( ((prevM2-pulsesM2)<2) || ((prevM2-pulsesM2)>(-2))))
-   {
-         STBY=1;
-         BI1=0; BI2=1; AI1=0; AI2=1;
-         set_pwm1_duty(nomV);
-         set_pwm2_duty(nomV);
-      
-         for(i=0;i<200000;i++){restart_wdt();}
-   }
-   prevM1=pulsesM1;
-   prevM2=pulsesM2;
-}
-*/
 
 void main()
 {  
@@ -155,9 +137,7 @@ void setup(short status)
    setup_adc_ports(AN0_TO_AN4, VSS_VDD);
    set_adc_channel(0);
    delay_us(20);
-   
-   //mpu6050_init();
-   
+
    TRISA=0b11111111;
    TRISB=0b11111101; //SCL
    TRISC=0b10111001; //PWMA, PWMB, TX
@@ -167,11 +147,7 @@ void setup(short status)
    setup_timer_2(T2_DIV_BY_1,255,1);
    setup_ccp1(CCP_PWM);
    setup_ccp2(CCP_PWM);
-   /*
-   setup_timer_0(T0_INTERNAL|T0_DIV_256);      //Emergency reverse
-   set_timer0((int16)0);
-   enable_interrupts(int_timer0);
-   */
+
    if(status)
    {
       motor('D',(int16)nomV,'D',(int16)nomV);
@@ -328,7 +304,7 @@ void forceStraight(signed int16 delay, short reference)
       if(reference)
          motor('D',(signed int16)(pwmL+offsetR),'D',(signed int16)pwmR);
          
-      if(F>closeWall)
+      if(F>turnWall)
       return;
       
       else if(FL>closeWall)
@@ -350,6 +326,7 @@ void forceStraight(signed int16 delay, short reference)
          pwmL=pwmL-(k*(FL-limWall));
          pwmR=pwmR+(k*(FL-limWall));
          motor('R',(signed int16)pwmL,'R',(signed int16)pwmR);
+         delay_ms(100);
       }
       
       else if(FR>closestWall)
@@ -357,6 +334,7 @@ void forceStraight(signed int16 delay, short reference)
          pwmL=pwmL+(k*(FR-limWall));
          pwmR=pwmR-(k*(FR-limWall));
          motor('R',(signed int16)pwmL,'R',(signed int16)pwmR);
+         delay_ms(100);
       }
             
       /*
@@ -420,11 +398,11 @@ void turn180()
    while((pulsesM2<pulses180) || (pulsesM1>(-1*pulses180)) || (F>limWall) || (FL>limWall) || (FR>limWall))
    {      
       update(turnV, turnV);
-      if(FR>closeWall || FL>closeWall || F>closeWall)
+      if(FR>closestWall || FL>closestWall || F>closestWall)
       {
          tempM1=pulsesM1;
          tempM2=pulsesM2;
-         while(FR>closeWall || FL>closeWall || F>closeWall)
+         while(FR>closestWall || FL>closestWall || F>closestWall)
          {
             update(nomV, nomV);
             motor('R',(signed int16)pwmL,'R',(signed int16)pwmR);
