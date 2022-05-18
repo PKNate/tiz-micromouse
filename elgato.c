@@ -43,8 +43,8 @@ static int16 closestWall=450;                      //Used in forceStraight.
 static int16 closeWall=350;                        //Used for emergency shifts in straight(); and reverses in turn180();
 static int16 turnWall=300;                         //Maximum allowed distance before attempting to turn
 static int16 limWall=240;                          //Avg distance between both L and R sensors with two walls
-static int16 noWall=100;                           //Minimum distance that indicates that no wall is nearby
-static signed int16 pulses90= 390;                 //Pulse counts (90º turn), tested at 350 turns avg
+static int16 noWall=150;                           //Minimum distance that indicates that no wall is nearby
+static signed int16 pulses90= 410;                 //Pulse counts (90º turn), tested at 350 turns avg
 static signed int16 pulses180= 690;                //Pulse counts (180º turn), tested at 720 turns avg
 static signed int16 pulsesD9= 690;                 //Delay for 90 turn, not tested
 static signed int16 pulsesDS= 500;                 //Delay for forcing straight, tested at 600 avg
@@ -330,21 +330,21 @@ void forceStraight(signed int16 delay, short reference)
          
       if(F>closeWall)
       return;
-      /*
+      
       else if(FL>closeWall)
       {
          pwmL=pwmL+(k*(FL-turnWall));
          pwmR=pwmR-(k*(FL-turnWall));
-         motor('R',(signed int16)pwmL,'D',(signed int16)pwmR);
+         motor('D',(signed int16)pwmL,'R',(signed int16)pwmR);
       }
       
       else if(FR>closeWall)
       {
          pwmL=pwmL-(k*(FR-turnWall));
          pwmR=pwmR+(k*(FR-turnWall));
-         motor('D',(signed int16)pwmL,'R',(signed int16)pwmR);
+         motor('R',(signed int16)pwmL,'D',(signed int16)pwmR);
       }
-      */
+      
       else if(FL>closestWall)     //Prioritizes not going straight into walls
       {
          pwmL=pwmL-(k*(FL-limWall));
@@ -393,6 +393,7 @@ void turn90(short direction)
          {
             motor('R',(signed int16)pwmL,'R',(signed int16)pwmR);
          }
+      
       }
    }
         
@@ -416,7 +417,7 @@ void turn180()
    pulsesM1=0;
    pulsesM2=0;
   
-   while((pulsesM1<pulses180) || (pulsesM2>(-1*pulses180)) || (F>limWall) || (FL>limWall) || (FR>limWall))
+   while((pulsesM2<pulses180) || (pulsesM1>(-1*pulses180)) || (F>limWall) || (FL>limWall) || (FR>limWall))
    {      
       update(turnV, turnV);
       if(FR>closeWall || FL>closeWall || F>closeWall)
@@ -434,7 +435,7 @@ void turn180()
       
       else 
       {
-         motor('D',(signed int16)pwmL,'R',(signed int16)pwmR);
+         motor('R',(signed int16)pwmL,'D',(signed int16)pwmR);
       }
    }
    return;
