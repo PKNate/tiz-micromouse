@@ -43,12 +43,12 @@ static int16 closestWall=450;                      //Used in forceStraight.
 static int16 closeWall=350;                        //Used for emergency shifts in straight(); and reverses in turn180();
 static int16 turnWall=300;                         //Maximum allowed distance before attempting to turn
 static int16 limWall=240;                          //Avg distance between both L and R sensors with two walls
-static int16 noWall=150;                           //Minimum distance that indicates that no wall is nearby
+static int16 noWall=100;                           //Minimum distance that indicates that no wall is nearby
 static signed int16 pulses90= 400;                 //Pulse counts (90º turn), tested at 350 turns avg
 static signed int16 pulses180= 690;                //Pulse counts (180º turn), tested at 720 turns avg
 static signed int16 pulsesD9= 520;                 //Delay for 90 turn, not tested
 static signed int16 pulsesDS= 490;                 //Delay for forcing straight, tested at 600 avg
-static signed int16 offsetR= 20;                   //prev:50
+static signed int16 offset= 40;                   //prev:50
                                                    //Encoder variables
 volatile int8 aux;      
 volatile int8 encoderM1=0;
@@ -57,12 +57,14 @@ volatile signed int16 pulsesM1=0;
 volatile int8 encoderM2=0;
 volatile int8 encoderM2_prev=0;
 volatile signed int16 pulsesM2=0;
+unsigned int32 i;
+short flag1, flag2;
 
 void setup(short status);                                            //Setup instructions
 void debug(int type);                                                //Encoder and SHARP test
 void motor(char M1, signed int16 pwm1, char M2, signed int16 pwm2);   //Basic function for motor driving
 void straight();   //Tries to drive straight, based on (ALL) SHARP readings (All 5 of them)
-void forceStraight(signed int16 delay, short reference);                                                //Used exclusively after a 90 turn.
+void forceStraight(signed int16 delay, short reference, short direction);                                                //Used exclusively after a 90 turn.
 void turn90(short direction);                                        //Short delay, 90 turn. Based on encoders, and (FL, FR) SHARP readings.
 void turn180();                                                      //180 turn, based on encoders and (ALL) SHARP readings
 void readSensor(int sensor);                                         //ADC read
@@ -72,22 +74,44 @@ void update(int16 pwm1, int16 pwm2);                                 //Restores 
 void rb_isr(){
    encoderM1=(PORTB&0b00110000)>>4;
    aux=encoderM1^encoderM1_prev;
+   flag1=0;
+   flag2=0;
+   
    if(aux!=0&&aux!=0b00000011)
+   {
+      flag1=1;
       if(((encoderM1_prev<<1)^encoderM1)&0b00000010)
          pulsesM1--;
       else
          pulsesM1++;
+   }
    encoderM1_prev=encoderM1;
 
    encoderM2=(PORTB&0b11000000)>>6;
    aux=encoderM2^encoderM2_prev;
    if(aux!=0&&aux!=0b00000011)
-         if(((encoderM2_prev<<1)^encoderM2)&0b00000010)
-            pulsesM2++;
-         else
-            pulsesM2--;
+   {
+      flag2=1;
+      if(((encoderM2_prev<<1)^encoderM2)&0b00000010)
+         pulsesM2++;
+      else
+         pulsesM2--;
+   }
             
    encoderM2_prev=encoderM2;
+   
+   if(flag1 && flag2)
+   set_timer0((int16)0);
+}
+
+#int_timer0
+void emergencyReverse(){
+   STBY=1;
+   BI1=0; BI2=1; AI1=0; AI2=1;
+   set_pwm1_duty(nomV);
+   set_pwm2_duty(nomV);
+      
+   for(i=0;i<200000;i++){restart_wdt();}
 }
 
 void main()
@@ -100,14 +124,15 @@ void main()
       
       if(R<noWall)
       {
-         forceStraight(pulsesD9,0);
+         forceStraight(pulsesD9,0,right);
          turn90(right);
-         forceStraight(pulsesDS,1);
+         forceStraight(pulsesDS,1,right);
       }
       
       else if(F>turnWall)
       {
          turn90(left);
+         //forceStraight(pulsesDS,1,left);
          
          /*
          if(L<noWall)
@@ -132,10 +157,6 @@ void main()
 void setup(short status)
 {
    STBY = 0;
-   
-   enable_interrupts(int_rb);
-   enable_interrupts(global);
-   
    setup_wdt(WDT_ON);
    setup_adc(adc_clock_div_16);
    setup_adc_ports(AN0_TO_AN4, VSS_VDD);
@@ -148,6 +169,12 @@ void setup(short status)
    TRISD=0b11111100; //BI1, BI2
    TRISE=0b01111000; //STBY, AI1, AI2
    
+   setup_timer_0(T0_INTERNAL|T0_DIV_256);      //Emergency reverse
+   set_timer0((int16)0);
+   enable_interrupts(int_timer0);
+   
+   enable_interrupts(int_rb);
+   enable_interrupts(global);
    setup_timer_2(T2_DIV_BY_1,255,1);
    setup_ccp1(CCP_PWM);
    setup_ccp2(CCP_PWM);
@@ -247,19 +274,19 @@ void straight()
       }
    }
    
-   /*
+   
    else if(R>noWall && L<noWall) //no left wall
    {
       if(R>limWall)
       {
-         pwmL=pwmL-(k*(R-limWall));
-         pwmR=pwmR+(k*(R-limWall));
+         pwmL=pwmL-(k*(R-limWall))-offset;
+         pwmR=pwmR+(k*(R-limWall))+offset;
       }
       
       if(R<limWall)
       {
-         pwmL=pwmL+(k*(R-limWall));
-         pwmR=pwmR-(k*(R-limWall));
+         pwmL=pwmL+(k*(limWall-R))+offset;
+         pwmR=pwmR-(k*(limWall-R))-offset;
       }
    }
    
@@ -267,17 +294,16 @@ void straight()
    {
       if(L>limWall)
       {
-         pwmL=pwmL+(k*(L-limWall));
-         pwmR=pwmR-(k*(L-limWall));
+         pwmL=pwmL+(k*(L-limWall))+offset;
+         pwmR=pwmR-(k*(L-limWall))-offset;
       }
       
       if(L<limWall)
       {
-         pwmL=pwmL-(k*(L-limWall));
-         pwmR=pwmR+(k*(L-limWall));
+         pwmL=pwmL-(k*(limWall-L))-offset;
+         pwmR=pwmR+(k*(limWall-L))+offset;
       }
    }
-   */
    
    else if(pulsesM1>pulsesM2)       //no walls to calibrate
       {
@@ -294,7 +320,7 @@ void straight()
    motor('D',(signed int16)pwmL,'D',(signed int16)pwmR);
    return;
 }
-void forceStraight(signed int16 delay, short reference)
+void forceStraight(signed int16 delay, short reference, short direction)
 {
    pulsesM1=0;
    pulsesM2=0;
@@ -306,8 +332,14 @@ void forceStraight(signed int16 delay, short reference)
       motor('D',(signed int16)pwmL,'D',(signed int16)pwmR);
       
       if(reference)
-         motor('D',(signed int16)(pwmL+offsetR),'D',(signed int16)pwmR);
-         
+      {
+         if(direction)
+         motor('D',(signed int16)(pwmL+offset),'D',(signed int16)pwmR);
+      
+         else
+         motor('D',(signed int16)(pwmL),'D',(signed int16)pwmR+offset);
+      }
+           
       if(F>turnWall)
       return;
       
