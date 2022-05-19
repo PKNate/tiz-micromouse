@@ -48,7 +48,7 @@ static signed int16 pulses90= 400;                 //Pulse counts (90º turn), te
 static signed int16 pulses180= 690;                //Pulse counts (180º turn), tested at 720 turns avg
 static signed int16 pulsesD9= 520;                 //Delay for 90 turn, not tested
 static signed int16 pulsesDS= 490;                 //Delay for forcing straight, tested at 600 avg
-static signed int16 offsetR= 10;                   //prev:50
+static signed int16 offsetR= 20;                   //prev:50
                                                    //Encoder variables
 volatile int8 aux;      
 volatile int8 encoderM1=0;
@@ -107,6 +107,9 @@ void main()
       
       else if(F>turnWall)
       {
+         turn90(left);
+         
+         /*
          if(L<noWall)
          {
             turn90(left);
@@ -116,6 +119,7 @@ void main()
          {
             turn180();
          }
+         */
       }
 
       else
